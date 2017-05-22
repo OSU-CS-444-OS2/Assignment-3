@@ -23,12 +23,21 @@
 MODULE_LICENSE("Dual BSD/GPL");
 static char *Version = "1.4";
 
+//Setting up the size of the block/sector
 static int major_num = 0;
 module_param(major_num, int, 0);
 static int logical_block_size = 512;
 module_param(logical_block_size, int, 0);
 static int nsectors = 1024; /* How big the drive is */
 module_param(nsectors, int, 0);
+
+//Setting up the cipher API
+struct crypto_cipher *crypCiph;
+static char *Key = "1111111111111111";
+module_param(Key, charp, 0644);
+static int keyLength = 16;
+module_param(keyLength, int, 0644);
+
 
 /*
  * We can tweak our hardware sector size, but the kernel talks to us
@@ -54,19 +63,63 @@ static struct ebd_device {
 /*
  * Handle an I/O request.
  */
-static void ebd_transfer(struct ebd_device *dev, sector_t sector,
-		unsigned long nsect, char *buffer, int write) {
+//Figure out if read or write.
+//Read decrypt data (block)
+//Write encrypt data (block)
+static void ebd_transfer(struct ebd_device *dev, sector_t sector, unsigned long nsect, char *buffer, int write) {
 	unsigned long offset = sector * logical_block_size;
 	unsigned long nbytes = nsect * logical_block_size;
+	int i;
 
 	if ((offset + nbytes) > dev->size) {
 		printk (KERN_NOTICE "ebd: Beyond-end write (%ld %ld)\n", offset, nbytes);
 		return;
 	}
-	if (write)
-		memcpy(dev->data + offset, buffer, nbytes);
-	else
-		memcpy(buffer, dev->data + offset, nbytes);
+
+
+	//Writting
+	if (write) {
+		//Print Encrypting
+		printk(KERNEL_NOTICE "Writting - Encrypting Starting\n");	
+	
+		//For the amount of bytes
+		for( i = 0; i <  nbytes; i += crypto_cipher_blocksize( crypCiph ) ){
+
+			//Encrypt
+			crypto_cipher_encrypt_one(
+				crypCiph,	 			/* Cipher handler */
+				dev->data + offset + i,			/* Destination */
+				buffer + i				/* Source */
+			);
+
+		}
+
+		//Print End
+		printk(KERNEL_NOTICE "Writting - Encrypting Ended\n");	
+
+
+	//Printing
+	} else {
+		//Print Decrypting	
+		printk(KERNEL_NOTICE "Reading - Decrypting Starting\n");	
+		
+		//For the amount of bytes
+		for( i = 0; i <  ; i += crypto_cipher_blocksize( crypCiph) ){
+
+			//Decrypt
+			crypto_cipher_decrypt_one(
+				crypCiph,	 			/* Cipher handler */
+				dev->data + offset + i,			/* Destination */
+				buffer + i				/* Source */
+			);
+
+		}
+
+		//Print End
+		printk(KERNEL_NOTICE "Reading - Decrypting Ended\n");	
+		
+	}
+
 }
 
 static void ebd_request(struct request_queue *q) {
@@ -82,8 +135,7 @@ static void ebd_request(struct request_queue *q) {
 			__blk_end_request_all(req, -EIO);
 			continue;
 		}
-		ebd_transfer(&Device, blk_rq_pos(req), blk_rq_cur_sectors(req),
-				req->buffer, rq_data_dir(req));
+		ebd_transfer(&Device, blk_rq_pos(req), blk_rq_cur_sectors(req), req->buffer, rq_data_dir(req));
 		if ( ! __blk_end_request_cur(req, 0) ) {
 			req = blk_fetch_request(q);
 		}
@@ -115,13 +167,20 @@ static struct block_device_operations ebd_ops = {
 		.getgeo = ebd_getgeo
 };
 
+//Allocate the cipher
 static int __init ebd_init(void) {
+	
+	//Allocate the cipher
+	crypCiph = crypto_alloc_cipher("aes",0,0)
+
 	/*
 	 * Set up our internal device.
 	 */
 	Device.size = nsectors * logical_block_size;
 	spin_lock_init(&Device.lock);
 	Device.data = vmalloc(Device.size);
+		
+
 	if (Device.data == NULL)
 		return -ENOMEM;
 	/*
@@ -163,8 +222,12 @@ out:
 	return -ENOMEM;
 }
 
-static void __exit ebd_exit(void)
-{
+//Free the cipher
+static void __exit ebd_exit(void) {
+	
+	//Free the cipher
+	crypt_free_cipher(crypCiph);
+
 	del_gendisk(Device.gd);
 	put_disk(Device.gd);
 	unregister_blkdev(major_num, "ebd");
