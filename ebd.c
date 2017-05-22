@@ -21,7 +21,7 @@
 #include <linux/crypto.h>
 
 MODULE_LICENSE("Dual BSD/GPL");
-static char *Version = "1.4";
+//static char *Version = "1.4";
 
 //Setting up the size of the block/sector
 static int major_num = 0;
@@ -33,7 +33,7 @@ module_param(nsectors, int, 0);
 
 //Setting up the cipher API
 struct crypto_cipher *crypCiph;
-static char *Key = "1111111111111111";
+static char *Key = "01234567keyCSTFS";
 module_param(Key, charp, 0644);
 static int keyLength = 16;
 module_param(keyLength, int, 0644);
@@ -63,9 +63,9 @@ static struct ebd_device {
 /*
  * Handle an I/O request.
  */
-//Figure out if read or write.
-//Read decrypt data (block)
-//Write encrypt data (block)
+	//Figure out if read or write.
+	//Read decrypt data (block)
+	//Write encrypt data (block)
 static void ebd_transfer(struct ebd_device *dev, sector_t sector, unsigned long nsect, char *buffer, int write) {
 	unsigned long offset = sector * logical_block_size;
 	unsigned long nbytes = nsect * logical_block_size;
@@ -79,44 +79,72 @@ static void ebd_transfer(struct ebd_device *dev, sector_t sector, unsigned long 
 
 	//Writting
 	if (write) {
+
 		//Print Encrypting
-		printk(KERNEL_NOTICE "Writting - Encrypting Starting\n");	
+		printk(KERN_NOTICE "\nWritting - Encrypting Starting\n");	
 	
+		//Print unencrypted
+		printk(KERN_NOTICE "Writting - unencrypted:\n");
+		for (i = 0; i < nbytes; i++) {
+			printk("%x", buffer[i] );
+		}
+		printk("\n");
+
 		//For the amount of bytes
 		for( i = 0; i <  nbytes; i += crypto_cipher_blocksize( crypCiph ) ){
 
 			//Encrypt
 			crypto_cipher_encrypt_one(
-				crypCiph,	 			/* Cipher handler */
-				dev->data + offset + i,			/* Destination */
-				buffer + i				/* Source */
+				crypCiph,	 	//Cipher
+				&buffer[i],		//Original
+				&buffer[i]		//New
 			);
 
 		}
+	
+		//Print encrypted data
+		printk(KERN_NOTICE "Writting - encrypted:\n");
+		for (i = 0; i < nbytes; i++) {
+			printk("%x", buffer[i] );
+		}
 
 		//Print End
-		printk(KERNEL_NOTICE "Writting - Encrypting Ended\n");	
+		printk(KERN_NOTICE "\nWritting - Encrypting Ended\n");	
 
 
-	//Printing
+	//Reading
 	} else {
+
 		//Print Decrypting	
-		printk(KERNEL_NOTICE "Reading - Decrypting Starting\n");	
-		
+		printk(KERN_NOTICE "\nReading - Decrypting Starting\n");	
+
+		//Print encrypted
+		printk(KERN_NOTICE "Reading - encrypted:\n");
+		for (i = 0; i < nbytes; i++) {
+			printk("%x", buffer[i] );
+		}
+		printk("\n");
+
 		//For the amount of bytes
-		for( i = 0; i <  ; i += crypto_cipher_blocksize( crypCiph) ){
+		for( i = 0; i <  nbytes; i += crypto_cipher_blocksize( crypCiph) ){
 
 			//Decrypt
 			crypto_cipher_decrypt_one(
-				crypCiph,	 			/* Cipher handler */
-				dev->data + offset + i,			/* Destination */
-				buffer + i				/* Source */
+				crypCiph,	 	//Cipher
+				&buffer[i],		//Original
+				&buffer[i]		//New
 			);
 
 		}
+	
+		//Print unencrypted data
+		printk(KERN_NOTICE "Reading - unencrypted:\n");
+		for (i = 0; i < nbytes; i++) {
+			printk("%x", buffer[i] );
+		}
 
 		//Print End
-		printk(KERNEL_NOTICE "Reading - Decrypting Ended\n");	
+		printk(KERN_NOTICE "\nReading - Decrypting Ended\n");	
 		
 	}
 
@@ -171,7 +199,7 @@ static struct block_device_operations ebd_ops = {
 static int __init ebd_init(void) {
 	
 	//Allocate the cipher
-	crypCiph = crypto_alloc_cipher("aes",0,0)
+	crypCiph = crypto_alloc_cipher( "aes", 0, 0 );
 
 	/*
 	 * Set up our internal device.
@@ -226,7 +254,7 @@ out:
 static void __exit ebd_exit(void) {
 	
 	//Free the cipher
-	crypt_free_cipher(crypCiph);
+	crypto_free_cipher( crypCiph );
 
 	del_gendisk(Device.gd);
 	put_disk(Device.gd);
