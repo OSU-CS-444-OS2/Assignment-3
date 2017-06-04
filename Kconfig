@@ -16,7 +16,7 @@ menuconfig BLK_DEV
 if BLK_DEV
 
 #Adding the module
-config CRYPTO_RD
+config SBD
     tristate "CS 444 - Encrypted Block Device - Group 12-03"
 
 config BLK_DEV_NULL_BLK

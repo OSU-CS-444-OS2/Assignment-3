@@ -7,6 +7,7 @@
 
 #Adding module in Kernel
 obj-m				+= ebd.o
+obj-m				+= sbd.o
 
 obj-$(CONFIG_MAC_FLOPPY)	+= swim3.o
 obj-$(CONFIG_BLK_DEV_SWIM)	+= swim_mod.o
